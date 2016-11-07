@@ -1,0 +1,70 @@
+#!/bin/sh
+
+if [ $# -ne 1 ]
+then 
+  echo "Usage: $0 reponame"
+  exit -1
+fi
+
+REPO=$1
+SERVER="$(hostname -s).$(hostname -d)"
+PORT=2413
+REPOPATH=/var/svn/repos
+
+# check for existing repos
+if [ -d ${REPOPATH}/${REPO} ]
+then
+  echo "Project ${REPO} is already present!"
+  exit -1
+fi
+
+# check for existing group matching repo name
+getent group $REPO > /dev/null 2>&1
+if [ $? -eq 0 ]
+then
+  echo "Group ${REPO} is already present!"
+  exit -1
+fi 
+
+# add new group to system
+groupadd ${REPO}
+if [ $? -ne 0 ]
+then
+  echo "Error on creating group $REPO"
+  exit -1
+fi
+
+# add new repository
+svnadmin create ${REPOPATH}/${REPO}
+if [ $? -ne 0 ]
+then
+  echo "Error on creating repository $REPO"
+  exit -1
+fi
+
+# change ownership and acces modes on a per group basys
+find ${REPOPATH}/${REPO} -type d -exec chmod 0770 {} \;
+find ${REPOPATH}/${REPO} -type f -exec chmod 0664 {} \;
+chgrp -R ${REPO} ${REPOPATH}/${REPO}
+
+se_side_info="
+On this server, add users to $REPO group:              \n
+                                                       \n
+usermod -aG ${REPO} username                           \n"
+
+cl_side_info="
+On clients, modify the file HOME/.subversion/config    \n
+by adding the following line in [tunnels] section:     \n
+                                                       \n
+customssh = ssh -p ${PORT} -q                          \n
+                                                       \n
+an then use the link:                                  \n 
+svn+customssh://${SERVER}/${REPO}                      \n"
+
+echo -ne "\n"
+echo -ne $cl_side_info
+echo -ne "\n"
+echo -ne $se_side_info
+
+exit 0
+
